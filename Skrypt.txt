@@ -1,0 +1,96 @@
+ try:
+        response = requests.post(url, headers=headers, json={}, timeout=15)
+        data = response.json()
+        
+        if data.get('code') == '000000' and data.get('success'):
+            return data['data']['configs']
+        else:
+            print("❌ Ошибка в ответе API")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Ошибка запроса: {e}")
+        return None
+
+def format_airdrop_message(airdrop):
+    """Форматирование сообщения об airdrop'е"""
+    # Конвертация времени
+    start_time = datetime.fromtimestamp(airdrop['claimStartTime']/1000)
+    end_time = datetime.fromtimestamp(airdrop['claimEndTime']/1000)
+    
+    message = f"🚀 <b>НОВЫЙ AIRDROP ОБНАРУЖЕН!</b>\n\n"
+    message += f"🎯 <b>{airdrop['configName']} ({airdrop['tokenSymbol']})</b>\n"
+    message += f"📝 {airdrop['configDescription']}\n"
+    message += f"💰 <b>Награда:</b> {airdrop['airdropAmount']} токенов\n"
+    message += f"🎯 <b>Требуется очков:</b> {airdrop['pointsThreshold']}\n"
+    message += f"📊 <b>Статус:</b> {airdrop['status']}\n"
+    message += f"⏰ <b>Начало:</b> {start_time.strftime('%d.%m.%Y %H:%M')}\n"
+    message += f"⏰ <b>Окончание:</b> {end_time.strftime('%d.%m.%Y %H:%M')}\n"
+    message += f"🔗 <b>Контракт:</b> <code>{airdrop['contractAddress']}</code>"
+    
+    return message
+def main():
+    """Основная функция"""
+    print("🤖 Бот мониторинга Alpha Airdrop запущен!")
+    print(f"📍 ID чата: {TELEGRAM_CHAT_ID}")
+    print("⏰ Проверка каждую  минуту...")
+    print("🔕 Бот будет молчать до нового аирдропа")
+    print("=" * 50)
+    
+    # Тестируем Telegram
+    test_msg = "🤖 <b>Бот мониторинга Binance Alpha Airdrop запущен!</b>\n\n✅ Все настроено корректно\n⏰ Проверка каждые 5 минут\n🔕 Ожидаю новые аирдропы"
+    if send_telegram_message(test_msg):
+        print("✅ Тест Telegram: УСПЕХ")
+    else:
+        print("❌ Тест Telegram: ОШИБКА")
+        return
+    
+    # Первоначальная инициализация
+    print("📋 Загружаю текущие аирдропы...")
+    initial_drops = check_alpha_airdrop()
+    if initial_drops:
+        for drop in initial_drops:
+            tracked_airdrops.add(drop['configId'])
+        print(f"✅ В памяти: {len(tracked_airdrops)} аирдропов")
+    else:
+        print("❌ Не удалось загрузить аирдропы")
+        return
+    
+    print("\n🎯 Начинаю мониторинг...")
+    
+    # Основной цикл
+    while True:
+        try:
+            current_time = datetime.now().strftime('%H:%M:%S')
+            print(f"[{current_time}] 🔍 Проверяю новые аирдропы...")
+            
+            drops = check_alpha_airdrop()
+            if not drops:
+                print("   📭 Не удалось получить данные")
+                time.sleep(CHECK_INTERVAL)
+                continue
+            
+            new_drops = []
+            for drop in drops:
+                # Ищем только активные и новые airdrop'ы
+                if (drop['status'] in ['active', 'upcoming'] and 
+                    drop['configId'] not in tracked_airdrops):
+                    new_drops.append(drop)
+                    tracked_airdrops.add(drop['configId'])
+            
+            if new_drops:
+                print(f"   ✅ Найдено {len(new_drops)} новых аирдропов!")
+                
+                for airdrop in new_drops:
+                    message = format_airdrop_message(airdrop)
+                    if send_telegram_message(message):
+                        print(f"   📨 Отправлено: {airdrop['configName']}")
+                    else:
+                        print(f"   ❌ Ошибка отправки: {airdrop['configName']}")
+            else:
+                print("   📭 Новых аирдропов нет")
+            
+            # Ждем следующую проверку
+            next_check = datetime.now().timestamp() + CHECK_INTERVAL
+            print(f"   ⏰ Следующая проверка: {datetime.fromtimestamp(next_check).strftime('%H:%M:%S')}")
+            time.sleep(CHECK_INTERVAL)
