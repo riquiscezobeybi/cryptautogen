@@ -1,3 +1,3 @@
 # cryptautogen
-crypta
+
 esp
